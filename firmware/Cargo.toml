@@ -1,0 +1,30 @@
+[package]
+name = "firmware"
+version = "0.1.0"
+authors = ["Bart Weber <bart.weber@btjwb.nl>"]
+edition = "2021"
+
+[dependencies]
+cortex-m                = { version = "0.7", features = ["inline-asm"] }
+cortex-m-rt             = { version = "0.7" }
+defmt                   = { version = "0.3" }
+defmt-rtt               = { version = "0.4" }
+embassy-embedded-hal    = { version = "0.1", features = ["defmt"] }
+embassy-executor        = { version = "0.5", features = ["task-arena-size-32768", "arch-cortex-m", "executor-thread", "executor-interrupt", "defmt", "integrated-timers"] }
+embassy-rp              = { version = "0.1", features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl"] }
+embassy-sync            = { version = "0.5", features = ["defmt"] }
+embassy-time            = { version = "0.3", features = ["defmt", "defmt-timestamp-uptime"] }
+embassy-usb             = { version = "0.2", features = ["defmt"] }
+embedded-hal            = { version = "1.0" }
+embedded-hal-async      = { version = "1.0" }
+embedded-hal-bus        = { version = "0.2", features = ["async"] }
+icd                     = { path = "../icd" }
+panic-probe             = { version = "0.3", features = ["print-defmt"] }
+rand                    = { version = "0.8", default-features = false }
+static_cell             = { version = "2.1", features = ["nightly"] }
+postcard-rpc            = { version = "0.5", features = ["embassy-usb-0_2-server"] }
+postcard                = { version = "1.0", features = ["experimental-derive"] }
+portable-atomic         = { version = "1.6", features = ["critical-section"] }
+
+[profile.release]
+debug = 2
