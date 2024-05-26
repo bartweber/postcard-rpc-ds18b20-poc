@@ -3,19 +3,19 @@ use postcard_rpc::{
     host_client::{HostClient, HostErr},
     standard_icd::{WireError, ERROR_PATH},
 };
-use icd::{Measurement, PingEndpoint};
+use icd::{Measurement, MeasurementEndpoint};
 
 pub struct DeviceClient {
     pub client: HostClient<WireError>,
 }
 
 #[derive(Debug)]
-pub enum WorkbookError<E> {
+pub enum Error<E> {
     Comms(HostErr<WireError>),
     Endpoint(E),
 }
 
-impl<E> From<HostErr<WireError>> for WorkbookError<E> {
+impl<E> From<HostErr<WireError>> for Error<E> {
     fn from(value: HostErr<WireError>) -> Self {
         Self::Comms(value)
     }
@@ -24,14 +24,14 @@ impl<E> From<HostErr<WireError>> for WorkbookError<E> {
 trait FlattenErr {
     type Good;
     type Bad;
-    fn flatten(self) -> Result<Self::Good, WorkbookError<Self::Bad>>;
+    fn flatten(self) -> Result<Self::Good, Error<Self::Bad>>;
 }
 
 impl<T, E> FlattenErr for Result<T, E> {
     type Good = T;
     type Bad = E;
-    fn flatten(self) -> Result<Self::Good, WorkbookError<Self::Bad>> {
-        self.map_err(WorkbookError::Endpoint)
+    fn flatten(self) -> Result<Self::Good, Error<Self::Bad>> {
+        self.map_err(Error::Endpoint)
     }
 }
 
@@ -40,12 +40,12 @@ impl<T, E> FlattenErr for Result<T, E> {
 impl DeviceClient {
     pub fn new() -> Self {
         let client =
-            HostClient::new_raw_nusb(|d| d.product_string() == Some("ov-twin"), ERROR_PATH, 8);
+            HostClient::new_raw_nusb(|d| d.product_string() == Some("measuring-device"), ERROR_PATH, 8);
         Self { client }
     }
 
-    pub async fn ping(&self, _id: u32) -> Result<Measurement, WorkbookError<Infallible>> {
-        let val = self.client.send_resp::<PingEndpoint>(&()).await?;
+    pub async fn measure(&self, _id: u32) -> Result<Measurement, Error<Infallible>> {
+        let val = self.client.send_resp::<MeasurementEndpoint>(&()).await?;
         Ok(val)
     }
 }

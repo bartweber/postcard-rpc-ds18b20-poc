@@ -316,6 +316,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ds18b20"
+version = "0.2.0"
+source = "git+https://github.com/bartweber/ds18b20#2b16f305ba04a7948d8df84187643fcbca4359e4"
+dependencies = [
+ "embedded-hal 1.0.0",
+ "one-wire-hal",
+]
+
+[[package]]
 name = "either"
 version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -630,6 +639,7 @@ dependencies = [
  "cortex-m-rt",
  "defmt",
  "defmt-rtt",
+ "ds18b20",
  "embassy-embedded-hal",
  "embassy-executor",
  "embassy-rp",
@@ -640,6 +650,8 @@ dependencies = [
  "embedded-hal-async",
  "embedded-hal-bus",
  "icd",
+ "one-wire-ds2482",
+ "one-wire-hal",
  "panic-probe",
  "portable-atomic",
  "postcard",
@@ -997,6 +1009,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
 
 [[package]]
+name = "one-wire-ds2482"
+version = "0.1.0"
+source = "git+https://github.com/bartweber/one-wire-ds2482#d1a328eee2dcf7dc88c41cd4ef4477449d89c1e9"
+dependencies = [
+ "embedded-hal 1.0.0",
+ "one-wire-hal",
+]
+
+[[package]]
+name = "one-wire-hal"
+version = "0.1.0"
+source = "git+https://github.com/bartweber/one-wire-hal#82a5422e0c2858c8097d7953bb6b6497dcd76481"
+dependencies = [
+ "embedded-hal 1.0.0",
+]
+
+[[package]]
 name = "panic-probe"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1008,9 +1037,9 @@ dependencies = [
 
 [[package]]
 name = "parking_lot"
-version = "0.12.2"
+version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e4af0ca4f6caed20e900d564c242b8e5d4903fdacf31d3daf527b66fe6f42fb"
+checksum = "f1bf18183cf54e8d6059647fc3063646a1801cf30896933ec2311622cc4b9a27"
 dependencies = [
  "lock_api",
  "parking_lot_core",
@@ -1187,9 +1216,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.83"
+version = "1.0.84"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b33eb56c327dec362a9e55b3ad14f9d2f0904fb5a5b03b513ab5465399e9f43"
+checksum = "ec96c6a92621310b51366f1e28d05ef11489516e93be030060e5fc12024a49d6"
 dependencies = [
  "unicode-ident",
 ]
@@ -1345,18 +1374,18 @@ checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 
 [[package]]
 name = "serde"
-version = "1.0.202"
+version = "1.0.203"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "226b61a0d411b2ba5ff6d7f73a476ac4f8bb900373459cd00fab8512828ba395"
+checksum = "7253ab4de971e72fb7be983802300c30b5a7f0c2e56fab8abfc6a214307c0094"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.202"
+version = "1.0.203"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6048858004bcff69094cd972ed40a32500f153bd3be9f716b2eed2e8217c4838"
+checksum = "500cbc0ebeb6f46627f50f3f5811ccf6bf00643be300b4c3eabc0ef55dc5b5ba"
 dependencies = [
  "proc-macro2",
  "quote",

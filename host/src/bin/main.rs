@@ -10,8 +10,8 @@ pub async fn main() {
 
     for i in 0..10 {
         ticker.tick().await;
-        print!("Pinging with {i}... ");
-        let res = client.ping(i).await.unwrap();
+        print!("Measurement #{i}... ");
+        let res = client.measure(i).await.unwrap();
         println!("got {:?}!", res);
         // assert_eq!(res, i);
     }
