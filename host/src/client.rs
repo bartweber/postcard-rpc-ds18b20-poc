@@ -1,9 +1,11 @@
 use std::convert::Infallible;
+
 use postcard_rpc::{
     host_client::{HostClient, HostErr},
-    standard_icd::{WireError, ERROR_PATH},
+    standard_icd::{ERROR_PATH, WireError},
 };
-use icd::{Measurement, MeasurementEndpoint};
+
+use icd::{StartMeasuring, StartMeasuringEndpoint, StopMeasuringEndpoint};
 
 pub struct DeviceClient {
     pub client: HostClient<WireError>,
@@ -44,9 +46,21 @@ impl DeviceClient {
         Self { client }
     }
 
-    pub async fn measure(&self, _id: u32) -> Result<Measurement, Error<Infallible>> {
-        let val = self.client.send_resp::<MeasurementEndpoint>(&()).await?;
-        Ok(val)
+    pub async fn start_measuring(&self, interval_ms: u32) -> Result<(), Error<Infallible>> {
+        self.client
+            .send_resp::<StartMeasuringEndpoint>(&StartMeasuring { interval_ms, threshold: 0.0 })
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn stop_measuring(&self) -> Result<bool, Error<Infallible>> {
+        let res = self
+            .client
+            .send_resp::<StopMeasuringEndpoint>(&())
+            .await?;
+
+        Ok(res)
     }
 }
 

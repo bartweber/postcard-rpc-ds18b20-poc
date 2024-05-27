@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 
+use core::sync::atomic::Ordering;
+
 use defmt::info;
 use ds18b20::{Ds18b20, Resolution};
 use embassy_executor::Spawner;
@@ -11,38 +13,63 @@ use embassy_rp::{
 use embassy_rp::i2c::{Blocking, I2c};
 use embassy_rp::peripherals::I2C1;
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
-use embassy_time::Delay;
+use embassy_sync::mutex::{Mutex, MutexGuard};
+use embassy_time::{Delay, Duration, Ticker};
 use embassy_usb::UsbDevice;
 use one_wire_ds2482::OneWireDS2482;
 use one_wire_hal::OneWire;
+use portable_atomic::AtomicBool;
 use postcard_rpc::{
     define_dispatch,
     target_server::{buffers::AllBuffers, configure_usb, example_config, rpc_dispatch},
     WireHeader,
 };
-use static_cell::ConstStaticCell;
+use postcard_rpc::target_server::sender::Sender;
+use postcard_rpc::target_server::SpawnContext;
+use static_cell::{ConstStaticCell, StaticCell};
 
-use firmware::{get_unique_id, Irqs};
-use icd::{Measurement, MeasurementEndpoint};
 use {defmt_rtt as _, panic_probe as _};
+use firmware::{get_unique_id, Irqs};
+use icd::{Measurement, MeasurementTopic, StartMeasuring, StartMeasuringEndpoint, StopMeasuringEndpoint};
 
+pub type OWire = OneWireDS2482<I2c<'static, I2C1, Blocking>>;
+
+static OWIRE: StaticCell<Mutex<ThreadModeRawMutex, OWire>> = StaticCell::new();
+static DB18B20: StaticCell<Mutex<ThreadModeRawMutex, Ds18b20>> = StaticCell::new();
 
 static ALL_BUFFERS: ConstStaticCell<AllBuffers<256, 256, 256>> =
     ConstStaticCell::new(AllBuffers::new());
 
 pub struct Context {
-    pub one_wire: OneWireDS2482<I2c<'static, I2C1, Blocking>>,
-    pub temp_sensor_1: Ds18b20,
+    pub one_wire: &'static Mutex<ThreadModeRawMutex, OWire>,
+    pub temp_sensor_1: &'static Mutex<ThreadModeRawMutex, Ds18b20>,
     pub delay: Delay,
+}
+
+pub struct SpawnCtx {
+    pub one_wire: &'static Mutex<ThreadModeRawMutex, OWire>,
+    pub temp_sensor_1: &'static Mutex<ThreadModeRawMutex, Ds18b20>,
+}
+
+impl SpawnContext for Context {
+    type SpawnCtxt = SpawnCtx;
+
+    fn spawn_ctxt(&mut self) -> Self::SpawnCtxt {
+        SpawnCtx {
+            one_wire: self.one_wire,
+            temp_sensor_1: self.temp_sensor_1,
+        }
+    }
 }
 
 define_dispatch! {
     dispatcher: Dispatcher<
         Mutex = ThreadModeRawMutex,
-        Driver = usb::Driver<'static, USB>,
+        Driver = Driver<'static, USB>,
         Context = Context
     >;
-    MeasurementEndpoint => async measurement_handler,
+    StartMeasuringEndpoint => spawn start_measuring_handler,
+    StopMeasuringEndpoint => blocking stop_measuring_handler,
 }
 
 #[embassy_executor::main]
@@ -66,6 +93,8 @@ async fn main(spawner: Spawner) {
     let addr_1 = one_wire.devices(&mut delay).next().unwrap().unwrap();
     info!("found device on address: {:?}", addr_1.0);
     let temp_sensor_1 = Ds18b20::new(addr_1).unwrap();
+    let owire_ref = OWIRE.init(Mutex::new(one_wire));
+    let temp_sensor_1_ref = DB18B20.init(Mutex::new(temp_sensor_1));
 
 
     // USB/RPC INIT
@@ -76,8 +105,8 @@ async fn main(spawner: Spawner) {
     let buffers = ALL_BUFFERS.take();
     let (device, ep_in, ep_out) = configure_usb(driver, &mut buffers.usb_device, config);
     let context = Context {
-        one_wire,
-        temp_sensor_1,
+        one_wire: owire_ref,
+        temp_sensor_1: temp_sensor_1_ref,
         delay,
     };
     let dispatch = Dispatcher::new(&mut buffers.tx_buf, ep_in, context);
@@ -102,18 +131,51 @@ pub async fn usb_task(mut usb: UsbDevice<'static, Driver<'static, USB>>) {
     usb.run().await;
 }
 
-async fn measurement_handler(context: &mut Context, header: WireHeader, _rqst: ()) -> Measurement {
-    let delay = &mut context.delay;
-    let temp_sensor_1 = &mut context.temp_sensor_1;
-    let one_wire = &mut context.one_wire;
-    ds18b20::start_simultaneous_temp_measurement(one_wire, delay).unwrap();
-    Resolution::Bits12.delay_for_measurement_time(delay);
-    let data_1 = temp_sensor_1.read_data(one_wire, delay).unwrap();
-    let temp01 = data_1.temperature;
+static STOP: AtomicBool = AtomicBool::new(false);
 
-    info!("ping: seq - {=u32}", header.seq_no);
-    info!("temp01: {=f32}", temp01);
-    Measurement {
-        temp01,
+#[embassy_executor::task]
+async fn start_measuring_handler(
+    context: SpawnCtx,
+    header: WireHeader,
+    rqst: StartMeasuring,
+    sender: Sender<ThreadModeRawMutex, Driver<'static, USB>>,
+) {
+    let mut one_wire = context.one_wire.lock().await;
+    let temp_sensor_1: MutexGuard<ThreadModeRawMutex, Ds18b20> = context.temp_sensor_1.lock().await;
+    if sender
+        .reply::<StartMeasuringEndpoint>(header.seq_no, &())
+        .await
+        .is_err()
+    {
+        defmt::error!("Failed to reply, stopping measuring");
+        return;
     }
+
+    let mut ticker = Ticker::every(Duration::from_millis(rqst.interval_ms.into()));
+    let mut seq = 0;
+    while !STOP.load(Ordering::Acquire) {
+        ticker.next().await;
+        ds18b20::start_simultaneous_temp_measurement(&mut *one_wire, &mut Delay).unwrap();
+        Resolution::Bits12.delay_for_measurement_time(&mut Delay);
+        let data_1 = temp_sensor_1.read_data(&mut *one_wire, &mut Delay).unwrap();
+        let temp01 = data_1.temperature;
+        info!("temp01: {=f32}", temp01);
+        let msg = Measurement {
+            temp01,
+        };
+        if sender.publish::<MeasurementTopic>(seq, &msg).await.is_err() {
+            defmt::error!("Failed to publish, stopping measuring");
+            break;
+        }
+        seq = seq.wrapping_add(1);
+    }
+
+    info!("Stopping!");
+    STOP.store(false, Ordering::Release);
+}
+
+fn stop_measuring_handler(_context: &mut Context, header: WireHeader, _rqst: ()) -> bool {
+    info!("accel_stop: seq - {=u32}", header.seq_no);
+    STOP.store(true, Ordering::Release);
+    true
 }

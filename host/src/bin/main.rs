@@ -5,14 +5,39 @@ use tokio::time::interval;
 
 #[tokio::main]
 pub async fn main() {
+    println!("Connecting...");
     let client = DeviceClient::new();
-    let mut ticker = interval(Duration::from_millis(250));
+    println!("Connected!");
 
-    for i in 0..10 {
-        ticker.tick().await;
-        print!("Measurement #{i}... ");
-        let res = client.measure(i).await.unwrap();
-        println!("got {:?}!", res);
-        // assert_eq!(res, i);
+    let mut sub = client.client.subscribe::<icd::MeasurementTopic>(8).await.unwrap();
+    tokio::spawn(async move {
+        loop {
+            let msg = sub.recv().await.unwrap();
+            println!("Got measurement: {:?}", msg);
+        }
+    });
+
+    // Begin repl...
+    loop {
+        print!("> ");
+        let line = host::read_line().await;
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        match parts.as_slice() {
+            ["start"] => {
+                client.start_measuring(1000).await.unwrap();
+                println!("Started measuring!")
+            }
+            ["stop"] => {
+                client.stop_measuring().await.unwrap();
+                println!("Stopped measuring!")
+            }
+            _ => {
+                println!("Unknown command");
+            }
+        }
     }
+}
+
+async fn measurement_listener() {
+
 }

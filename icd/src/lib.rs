@@ -12,4 +12,12 @@ pub struct Measurement {
     pub temp01: f32,
 }
 
-endpoint!(MeasurementEndpoint, (), Measurement, "measurement");
+#[derive(Debug, Serialize, Deserialize, Schema, PartialEq)]
+pub struct StartMeasuring {
+    pub interval_ms: u32,
+    pub threshold: f32,
+}
+
+endpoint!(StartMeasuringEndpoint, StartMeasuring, (), "measuring/start");
+endpoint!(StopMeasuringEndpoint, (), bool, "measuring/stop");
+topic!(MeasurementTopic, Measurement, "measuring/data");
